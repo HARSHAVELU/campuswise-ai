@@ -20,10 +20,12 @@ import re
 import voyageai
 
 from app.core.config import get_settings
+from app.core.llm_telemetry import record_fallback, track_llm_call
 from app.retrieval.constants import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
 
+_PURPOSE = "embedding"
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
@@ -55,12 +57,17 @@ def embed_batch(texts: list[str], *, input_type: str = "document") -> list[list[
     if settings.voyage_api_key:
         try:
             client = voyageai.Client(api_key=settings.voyage_api_key)
-            result = client.embed(
-                texts, model=settings.voyage_embedding_model, input_type=input_type
-            )
+            with track_llm_call("voyage", _PURPOSE, settings.voyage_embedding_model) as rec:
+                result = client.embed(
+                    texts, model=settings.voyage_embedding_model, input_type=input_type
+                )
+                rec.input_tokens = getattr(result, "total_tokens", None)
             return [[float(v) for v in embedding] for embedding in result.embeddings]
         except Exception as exc:  # noqa: BLE001 -- any provider failure should degrade, not crash ingestion
             logger.warning("Voyage embedding call failed, falling back to hash embedding: %s", exc)
+            record_fallback(_PURPOSE, "llm_error")
+    else:
+        record_fallback(_PURPOSE, "no_api_key")
 
     return _hash_embed_batch(texts)
 

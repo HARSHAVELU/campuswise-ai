@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ChatWidget } from "@/components/ChatWidget";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
@@ -17,6 +18,7 @@ export default function RootLayout({
       <body>
         <SiteHeader />
         {children}
+        <ChatWidget />
       </body>
     </html>
   );

@@ -15,6 +15,7 @@ import anthropic
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.llm_telemetry import record_fallback, track_llm_call
 from app.repositories.syllabus_repository import SyllabusRepository
 from app.retrieval.hybrid_search import RetrievedChunk, hybrid_search
 from app.schemas.rag import Citation, RAGQueryResponse
@@ -67,9 +68,13 @@ def _build_citations(retrieved: list[RetrievedChunk]) -> list[Citation]:
     return citations
 
 
+_PURPOSE = "syllabus_qa"
+
+
 def _generate_answer_llm(query: str, retrieved: list[RetrievedChunk]) -> str | None:
     settings = get_settings()
     if not settings.anthropic_api_key:
+        record_fallback(_PURPOSE, "no_api_key")
         return None
 
     excerpt_block = "\n\n".join(
@@ -78,21 +83,25 @@ def _generate_answer_llm(query: str, retrieved: list[RetrievedChunk]) -> str | N
     )
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=400,
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Excerpts:\n\n{excerpt_block}\n\nQuestion: {query}",
-                }
-            ],
-        )
+        with track_llm_call("anthropic", _PURPOSE, settings.anthropic_model) as rec:
+            response = client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=400,
+                system=_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Excerpts:\n\n{excerpt_block}\n\nQuestion: {query}",
+                    }
+                ],
+            )
+            rec.input_tokens = response.usage.input_tokens
+            rec.output_tokens = response.usage.output_tokens
         text_block = next((b for b in response.content if b.type == "text"), None)
         return text_block.text if text_block else None
     except anthropic.APIError as exc:
         logger.warning("Anthropic syllabus QA call failed, falling back to excerpt-only answer: %s", exc)
+        record_fallback(_PURPOSE, "llm_error")
         return None
 
 

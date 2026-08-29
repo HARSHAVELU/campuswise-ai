@@ -44,30 +44,134 @@ DEPARTMENTS = [
     ("MATH", "Mathematics"),
     ("STAT", "Statistics"),
     ("BUSN", "Business Administration"),
+    ("ECON", "Economics"),
+    ("PHYS", "Physics"),
 ]
 
-# (dept_code, course_code, title, credit_hours, level, topics)
+# (dept_code, course_code, title, credit_hours, level, topics, description)
 COURSES = [
-    ("CS", "CS 1336", "Programming Fundamentals", 3, "undergraduate", ["python", "programming basics"]),
-    ("CS", "CS 2336", "Data Structures", 3, "undergraduate", ["data structures", "java"]),
-    ("CS", "CS 3345", "Algorithm Analysis", 3, "undergraduate", ["algorithms"]),
-    ("CS", "CS 4347", "Database Systems", 3, "undergraduate", ["sql", "databases"]),
-    ("CS", "CS 4375", "Introduction to Machine Learning", 3, "undergraduate", ["machine learning", "python", "ai"]),
-    ("CS", "CS 4395", "Natural Language Processing", 3, "graduate", ["nlp", "python", "ai"]),
-    ("CS", "CS 4365", "Artificial Intelligence", 3, "undergraduate", ["ai", "search algorithms"]),
-    ("CS", "CS 3377", "Software Engineering", 3, "undergraduate", ["software engineering", "agile"]),
-    ("CS", "CS 4348", "Operating Systems Concepts", 3, "undergraduate", ["operating systems", "systems programming"]),
-    ("CS", "CS 4349", "Advanced Algorithm Design", 3, "graduate", ["algorithms", "optimization"]),
-    ("MATH", "MATH 2413", "Calculus I", 4, "undergraduate", ["calculus"]),
-    ("MATH", "MATH 2419", "Calculus II", 4, "undergraduate", ["calculus"]),
-    ("MATH", "MATH 3315", "Probability and Statistics", 3, "undergraduate", ["statistics", "probability"]),
-    ("MATH", "MATH 3321", "Linear Algebra", 3, "undergraduate", ["linear algebra"]),
-    ("STAT", "STAT 4351", "Applied Statistics with Python", 3, "undergraduate", ["statistics", "python"]),
-    ("STAT", "STAT 4382", "Data Visualization", 3, "undergraduate", ["data visualization", "python"]),
-    ("BUSN", "BUSN 3305", "Business Analytics", 3, "undergraduate", ["analytics", "excel"]),
-    ("BUSN", "BUSN 3320", "Financial Management", 3, "undergraduate", ["finance"]),
-    ("BUSN", "BUSN 4310", "Marketing Strategy", 3, "undergraduate", ["marketing"]),
-    ("BUSN", "BUSN 4325", "Business Python Applications", 3, "undergraduate", ["python", "business analytics"]),
+    ("CS", "CS 1336", "Programming Fundamentals", 3, "undergraduate", ["python", "programming basics"],
+     "An introduction to computer programming using Python, covering variables, control flow, "
+     "functions, basic data structures, and problem-solving techniques for students with no prior "
+     "programming experience."),
+    ("CS", "CS 2336", "Data Structures", 3, "undergraduate", ["data structures", "java"],
+     "Study of core data structures — arrays, linked lists, stacks, queues, trees, and hash tables — "
+     "and their implementation and analysis using Java, with an emphasis on choosing the right "
+     "structure for a given problem."),
+    ("CS", "CS 3345", "Algorithm Analysis", 3, "undergraduate", ["algorithms"],
+     "Formal techniques for analyzing algorithm efficiency, including asymptotic notation, "
+     "divide-and-conquer, dynamic programming, and greedy algorithms, with proofs of correctness "
+     "and complexity."),
+    ("CS", "CS 4347", "Database Systems", 3, "undergraduate", ["sql", "databases"],
+     "Relational database design, normalization, SQL query writing and optimization, transaction "
+     "management, and an introduction to NoSQL data stores, with hands-on database design projects."),
+    ("CS", "CS 4375", "Introduction to Machine Learning", 3, "undergraduate",
+     ["machine learning", "python", "ai"],
+     "Foundational machine learning techniques including linear and logistic regression, decision "
+     "trees, clustering, and neural network basics, implemented in Python using scikit-learn."),
+    ("CS", "CS 4395", "Natural Language Processing", 3, "graduate", ["nlp", "python", "ai"],
+     "Computational techniques for processing and understanding human language, covering "
+     "tokenization, part-of-speech tagging, sentiment analysis, and transformer-based language "
+     "models."),
+    ("CS", "CS 4365", "Artificial Intelligence", 3, "undergraduate", ["ai", "search algorithms"],
+     "Classical AI techniques including search algorithms, constraint satisfaction, game playing, "
+     "and an introduction to knowledge representation and planning."),
+    ("CS", "CS 3377", "Software Engineering", 3, "undergraduate", ["software engineering", "agile"],
+     "Team-based software development practices including requirements gathering, agile "
+     "methodologies, version control, testing, and code review, culminating in a semester-long "
+     "group project."),
+    ("CS", "CS 4348", "Operating Systems Concepts", 3, "undergraduate",
+     ["operating systems", "systems programming"],
+     "Core operating system principles — processes, threads, scheduling, memory management, and "
+     "file systems — with programming assignments in C."),
+    ("CS", "CS 4349", "Advanced Algorithm Design", 3, "graduate", ["algorithms", "optimization"],
+     "Advanced algorithmic techniques including network flow, approximation algorithms, randomized "
+     "algorithms, and NP-completeness, intended as a capstone-level algorithms course."),
+    ("CS", "CS 2340", "Computer Architecture", 3, "undergraduate",
+     ["computer architecture", "digital logic"],
+     "Digital logic design, instruction set architecture, pipelining, memory hierarchy, and the "
+     "hardware/software interface, with lab exercises building simple processors."),
+    ("CS", "CS 3320", "Web Application Development", 3, "undergraduate",
+     ["web development", "javascript", "python"],
+     "Full-stack web development covering HTML/CSS/JavaScript, a modern frontend framework, REST "
+     "API design, and deployment, with a semester project building a complete web application."),
+    ("CS", "CS 4341", "Computer Networks", 3, "undergraduate", ["networking", "systems programming"],
+     "Networking fundamentals including the TCP/IP stack, routing, network security basics, and "
+     "socket programming, with labs analyzing real network traffic."),
+    ("CS", "CS 4390", "Mobile App Development", 3, "undergraduate", ["mobile development", "java"],
+     "Native mobile application development for iOS and Android, covering UI design, local "
+     "storage, device APIs, and app store deployment."),
+    ("CS", "CS 4398", "Cybersecurity Fundamentals", 3, "undergraduate",
+     ["cybersecurity", "networking"],
+     "Introduction to information security including cryptography basics, common vulnerabilities, "
+     "secure coding practices, and network defense, with hands-on labs in a sandboxed environment."),
+    ("CS", "CS 4399", "Cloud Computing and Distributed Systems", 3, "graduate",
+     ["cloud computing", "distributed systems"],
+     "Principles of distributed systems and cloud infrastructure, covering containerization, "
+     "orchestration, distributed consensus, and scalable system design on a major cloud platform."),
+    ("MATH", "MATH 2413", "Calculus I", 4, "undergraduate", ["calculus"],
+     "Limits, derivatives, and their applications, including optimization and related rates, with "
+     "an introduction to definite integrals."),
+    ("MATH", "MATH 2419", "Calculus II", 4, "undergraduate", ["calculus"],
+     "Techniques of integration, infinite series, parametric equations, and polar coordinates, "
+     "building directly on Calculus I."),
+    ("MATH", "MATH 2417", "Calculus III", 4, "undergraduate", ["calculus", "multivariable calculus"],
+     "Multivariable calculus including partial derivatives, multiple integrals, and vector "
+     "calculus, with applications to physics and engineering."),
+    ("MATH", "MATH 3315", "Probability and Statistics", 3, "undergraduate", ["statistics", "probability"],
+     "Foundational probability theory and statistical inference, including random variables, "
+     "distributions, hypothesis testing, and confidence intervals."),
+    ("MATH", "MATH 3321", "Linear Algebra", 3, "undergraduate", ["linear algebra"],
+     "Vector spaces, matrices, eigenvalues and eigenvectors, and linear transformations, with "
+     "applications to computer graphics and data science."),
+    ("MATH", "MATH 3350", "Discrete Mathematics", 3, "undergraduate", ["discrete math", "algorithms"],
+     "Logic, set theory, combinatorics, graph theory, and proof techniques foundational to "
+     "computer science and algorithm analysis."),
+    ("STAT", "STAT 4351", "Applied Statistics with Python", 3, "undergraduate", ["statistics", "python"],
+     "Practical statistical analysis using Python (pandas, NumPy, SciPy), covering exploratory "
+     "data analysis, hypothesis testing, and regression modeling on real datasets."),
+    ("STAT", "STAT 4382", "Data Visualization", 3, "undergraduate", ["data visualization", "python"],
+     "Principles of effective data visualization and hands-on practice building charts, "
+     "dashboards, and interactive visualizations using Python visualization libraries."),
+    ("STAT", "STAT 4355", "Statistical Machine Learning", 3, "graduate",
+     ["machine learning", "statistics"],
+     "Statistical foundations of machine learning methods including regularization, "
+     "cross-validation, ensemble methods, and model evaluation, bridging statistics and applied ML."),
+    ("STAT", "STAT 4390", "Time Series Analysis", 3, "undergraduate", ["statistics", "forecasting"],
+     "Analysis and forecasting of time-dependent data, covering trend and seasonality "
+     "decomposition, ARIMA models, and an introduction to forecasting with modern tools."),
+    ("BUSN", "BUSN 3305", "Business Analytics", 3, "undergraduate", ["analytics", "excel"],
+     "Data-driven decision-making for business, covering descriptive and predictive analytics "
+     "techniques using spreadsheet and BI tools, with case-study-based assignments."),
+    ("BUSN", "BUSN 3320", "Financial Management", 3, "undergraduate", ["finance"],
+     "Core principles of corporate finance including time value of money, capital budgeting, risk "
+     "and return, and financial statement analysis."),
+    ("BUSN", "BUSN 4310", "Marketing Strategy", 3, "undergraduate", ["marketing"],
+     "Strategic marketing frameworks including market segmentation, positioning, the marketing "
+     "mix, and digital marketing, applied through case studies and a marketing plan project."),
+    ("BUSN", "BUSN 4325", "Business Python Applications", 3, "undergraduate",
+     ["python", "business analytics"],
+     "Applying Python programming to business problems including data cleaning, automation, and "
+     "building simple analytics tools, for students with introductory programming background."),
+    ("BUSN", "BUSN 3350", "Organizational Behavior", 3, "undergraduate", ["management"],
+     "How individuals, teams, and organizational structures affect workplace behavior and "
+     "performance, covering motivation, leadership, and organizational culture."),
+    ("BUSN", "BUSN 4340", "Entrepreneurship and Innovation", 3, "undergraduate",
+     ["entrepreneurship", "innovation"],
+     "The startup lifecycle from ideation to launch, covering business model design, lean startup "
+     "methodology, and pitching to investors, with a capstone venture pitch."),
+    ("ECON", "ECON 2301", "Principles of Microeconomics", 3, "undergraduate", ["economics"],
+     "Introduction to microeconomic theory including supply and demand, market structures, "
+     "consumer and producer behavior, and market failures."),
+    ("ECON", "ECON 4315", "Econometrics", 3, "graduate", ["economics", "statistics"],
+     "Statistical methods for economic analysis, including regression modeling, causal inference, "
+     "and hypothesis testing applied to real economic data."),
+    ("PHYS", "PHYS 2325", "University Physics I", 4, "undergraduate", ["physics", "mechanics"],
+     "Calculus-based introduction to mechanics, covering kinematics, Newton's laws, energy, "
+     "momentum, and rotational motion, with a required lab component."),
+    ("PHYS", "PHYS 3340", "Computational Physics", 3, "undergraduate", ["physics", "python"],
+     "Numerical methods for solving physics problems using Python, including simulation of "
+     "physical systems, numerical integration, and data analysis of experimental results."),
 ]
 
 # (dept_code, name, title)
@@ -79,14 +183,28 @@ PROFESSORS = [
     ("CS", "Dr. Daniel Osei", "Associate Professor"),
     ("CS", "Dr. Grace Lindqvist", "Lecturer"),
     ("CS", "Dr. Marcus Fielding", "Professor"),
+    ("CS", "Dr. Isabella Torres", "Assistant Professor"),
+    ("CS", "Dr. Kevin Park", "Associate Professor"),
+    ("CS", "Dr. Amara Nwosu", "Senior Lecturer"),
+    ("CS", "Dr. Benjamin Cole", "Lecturer"),
     ("MATH", "Dr. Ana Rocha", "Professor"),
     ("MATH", "Dr. Thomas Whitfield", "Associate Professor"),
     ("MATH", "Dr. Yuki Tanaka", "Lecturer"),
+    ("MATH", "Dr. Farah Al-Sayed", "Assistant Professor"),
+    ("MATH", "Dr. Lucas Bennett", "Senior Lecturer"),
     ("STAT", "Dr. Olivia Bergstrom", "Assistant Professor"),
     ("STAT", "Dr. Rahul Deshmukh", "Senior Lecturer"),
+    ("STAT", "Dr. Meera Iyer", "Associate Professor"),
+    ("STAT", "Dr. Connor Doyle", "Lecturer"),
     ("BUSN", "Dr. Claire Whitmore", "Professor"),
     ("BUSN", "Dr. Victor Adeyemi", "Associate Professor"),
     ("BUSN", "Dr. Sofia Petrov", "Lecturer"),
+    ("BUSN", "Dr. Natalie Brooks", "Assistant Professor"),
+    ("BUSN", "Dr. Omar Haddad", "Senior Lecturer"),
+    ("ECON", "Dr. Julia Kaminski", "Associate Professor"),
+    ("ECON", "Dr. Andres Reyes", "Assistant Professor"),
+    ("PHYS", "Dr. Hannah Kessler", "Professor"),
+    ("PHYS", "Dr. Ravi Chandran", "Associate Professor"),
 ]
 
 BUILDINGS = [
@@ -170,7 +288,8 @@ def seed() -> None:
                 department_id=departments[dept_code].id,
                 name=name,
                 title=title,
-                email=name.split(" ", 1)[1].replace(" ", ".").lower() + "@northlake.example.edu",
+                email=name.split(" ", 1)[1].replace(" ", ".").replace("-", "").lower()
+                + "@northlake.example.edu",
             )
             db.add(professor)
             professors.append(professor)
@@ -193,17 +312,14 @@ def seed() -> None:
             db.add(rating)
 
         courses: list[Course] = []
-        for dept_code, code, title, credits, level, topics in COURSES:
+        for dept_code, code, title, credits, level, topics, description in COURSES:
             course = Course(
                 id=uuid.uuid4(),
                 university_id=university.id,
                 department_id=departments[dept_code].id,
                 code=code,
                 title=title,
-                description=(
-                    f"{title} covers foundational and applied concepts relevant to "
-                    f"{', '.join(topics)}. (Synthetic sample course description.)"
-                ),
+                description=description,
                 credit_hours=credits,
                 level=CourseLevel(level),
             )
@@ -221,7 +337,7 @@ def seed() -> None:
             db.add(building)
             db.flush()
             buildings.append(building)
-            for room_number in ["101", "204", "310"]:
+            for room_number in ["101", "204", "310", "412"]:
                 room = Room(
                     id=uuid.uuid4(), building_id=building.id, room_number=room_number, capacity=40
                 )
@@ -255,13 +371,16 @@ def seed() -> None:
         ]
         start_hours = [9, 10, 11, 13, 14, 16]
 
+        # Every course gets 2-3 sections spread across terms/professors/delivery
+        # modes so the catalog has real depth to search, filter, and schedule against.
         sections_created = 0
-        target_sections = 40
-        course_cycle = list(courses)
-        random.shuffle(course_cycle)
+        section_plan: list[Course] = []
+        for course in courses:
+            for _ in range(random.choice([2, 3])):
+                section_plan.append(course)
+        random.shuffle(section_plan)
 
-        for i in range(target_sections):
-            course = course_cycle[i % len(course_cycle)]
+        for i, course in enumerate(section_plan):
             dept_code = next(d for d, c, *_ in COURSES if c == course.code)
             candidate_profs = professors_by_dept.get(dept_code, professors)
             professor = random.choice(candidate_profs)
@@ -270,12 +389,22 @@ def seed() -> None:
             building = random.choice(buildings)
             room = random.choice([r for r in rooms if r.building_id == building.id])
 
+            existing_numbers = {
+                s.section_number
+                for s in db.query(Section)
+                .filter_by(course_id=course.id, term_id=term.id)
+                .all()
+            }
+            section_number = next(
+                n for n in (f"{k:03d}" for k in range(1, 10)) if n not in existing_numbers
+            )
+
             section = Section(
                 id=uuid.uuid4(),
                 course_id=course.id,
                 term_id=term.id,
                 professor_id=professor.id,
-                section_number=f"{(i % 5) + 1:03d}",
+                section_number=section_number,
                 delivery_mode=delivery,
                 seats_total=random.choice([25, 30, 40, 60]),
             )

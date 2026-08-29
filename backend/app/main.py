@@ -11,8 +11,11 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.error_handlers import unhandled_exception_handler
 from app.core.logging import configure_logging
+from app.core.metrics import instrument_app
 from app.core.rate_limit import limiter
 from app.core.request_logging import RequestLoggingMiddleware
+from app.core.tracing import configure_tracing
+from app.database.session import engine
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -48,3 +51,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_prefix)
+
+instrument_app(app)  # GET /metrics -- always on, no external dependency
+configure_tracing(app, engine)  # no-op unless OTEL_ENABLED=true

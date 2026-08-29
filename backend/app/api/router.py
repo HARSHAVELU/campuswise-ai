@@ -4,6 +4,7 @@ from app.api.routes import (
     ai,
     assessment,
     auth,
+    chat,
     courses,
     degree,
     health,
@@ -23,6 +24,7 @@ api_router.include_router(professors.router)
 api_router.include_router(sections.router)
 api_router.include_router(terms.router)
 api_router.include_router(ai.router)
+api_router.include_router(chat.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(rag.router)
 api_router.include_router(assessment.router)

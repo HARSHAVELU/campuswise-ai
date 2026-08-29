@@ -1,4 +1,9 @@
-from app.optimization.schedule_optimizer import ScheduleStrategy, solve_schedule
+from app.optimization.schedule_optimizer import (
+    ScheduleStrategy,
+    diagnose_insufficient_mode_candidates,
+    solve_schedule,
+)
+from app.schemas.ai_search import DeliveryModeCount
 from app.schemas.course import CourseSummary
 from app.schemas.recommendation import SectionRecommendation
 from app.schemas.section import SectionMeetingRead, SectionRead
@@ -109,3 +114,61 @@ def test_online_heavy_prefers_online_sections():
     )
     assert solution is not None
     assert solution.selected[0].section.delivery_mode == "online"
+
+
+def test_delivery_mode_counts_enforced_as_minimums():
+    sections = [
+        _rec(1, None, None, None, fit_score=90, delivery_mode="online", credit_hours=3),
+        _rec(2, None, None, None, fit_score=85, delivery_mode="online", credit_hours=3),
+        _rec(3, "monday", "09:00", "10:15", fit_score=70, delivery_mode="in_person", credit_hours=3),
+        _rec(4, "wednesday", "09:00", "10:15", fit_score=65, delivery_mode="in_person", credit_hours=3),
+    ]
+    solution = solve_schedule(
+        sections,
+        ScheduleStrategy.BEST_OVERALL,
+        min_credits=12,
+        max_credits=12,
+        delivery_mode_counts=[
+            DeliveryModeCount(mode="online", count=2),
+            DeliveryModeCount(mode="in_person", count=2),
+        ],
+    )
+    assert solution is not None
+    modes = [rec.section.delivery_mode for rec in solution.selected]
+    assert modes.count("online") >= 2
+    assert modes.count("in_person") >= 2
+
+
+def test_delivery_mode_counts_infeasible_when_not_enough_candidates():
+    sections = [
+        _rec(1, None, None, None, fit_score=90, delivery_mode="online", credit_hours=3),
+    ]
+    solution = solve_schedule(
+        sections,
+        ScheduleStrategy.BEST_OVERALL,
+        min_credits=3,
+        max_credits=3,
+        delivery_mode_counts=[DeliveryModeCount(mode="online", count=2)],
+    )
+    assert solution is None
+
+
+def test_diagnose_insufficient_mode_candidates_reports_shortfall():
+    sections = [
+        _rec(1, None, None, None, fit_score=90, delivery_mode="online", credit_hours=3),
+    ]
+    notes = diagnose_insufficient_mode_candidates(
+        sections, [DeliveryModeCount(mode="online", count=2), DeliveryModeCount(mode="in_person", count=1)]
+    )
+    assert len(notes) == 2
+    assert any("online" in n and "1" in n and "2" in n for n in notes)
+    assert any("in person" in n and "0" in n and "1" in n for n in notes)
+
+
+def test_diagnose_insufficient_mode_candidates_silent_when_enough():
+    sections = [
+        _rec(1, None, None, None, fit_score=90, delivery_mode="online", credit_hours=3),
+        _rec(2, None, None, None, fit_score=80, delivery_mode="online", credit_hours=3),
+    ]
+    notes = diagnose_insufficient_mode_candidates(sections, [DeliveryModeCount(mode="online", count=2)])
+    assert notes == []

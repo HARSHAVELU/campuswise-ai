@@ -15,7 +15,12 @@ from app.agents.course_discovery import discover_courses
 from app.agents.recommendation_pipeline import EXCLUSION_REASON_LABELS
 from app.agents.requirement_parser import parse_requirement
 from app.optimization.conflict_detection import detect_conflicts
-from app.optimization.schedule_optimizer import STRATEGY_LABELS, ScheduleStrategy, solve_schedule
+from app.optimization.schedule_optimizer import (
+    STRATEGY_LABELS,
+    ScheduleStrategy,
+    diagnose_insufficient_mode_candidates,
+    solve_schedule,
+)
 from app.ranking.engine import rank_sections
 from app.repositories.section_repository import SectionRepository
 from app.schemas.schedule import (
@@ -52,7 +57,13 @@ def generate_schedules(
 
     schedules: dict[str, ScheduleResult | None] = {}
     for strategy in ScheduleStrategy:
-        solution = solve_schedule(recommendations, strategy, min_credits, max_credits)
+        solution = solve_schedule(
+            recommendations,
+            strategy,
+            min_credits,
+            max_credits,
+            delivery_mode_counts=parsed.hard_constraints.delivery_mode_counts,
+        )
         if solution is None:
             schedules[strategy.value] = None
             continue
@@ -69,6 +80,12 @@ def generate_schedules(
     if not recommendations:
         notes.append("No candidate sections were available to build a schedule from.")
     elif all(result is None for result in schedules.values()):
+        if parsed.hard_constraints.delivery_mode_counts:
+            notes.extend(
+                diagnose_insufficient_mode_candidates(
+                    recommendations, parsed.hard_constraints.delivery_mode_counts
+                )
+            )
         notes.append(
             f"No feasible schedule was found within {min_credits}-{max_credits} credits given "
             "your current requirements. Try widening the credit range or relaxing a requirement."

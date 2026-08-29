@@ -11,7 +11,7 @@ it covers the phrasing patterns from the product brief's demo scenarios.
 
 import re
 
-from app.schemas.ai_search import HardConstraints, ParsedRequirement, SoftPreferences
+from app.schemas.ai_search import DeliveryModeCount, HardConstraints, ParsedRequirement, SoftPreferences
 
 TOPIC_KEYWORDS = [
     "machine learning",
@@ -84,7 +84,10 @@ def _extract_delivery_modes(text: str) -> tuple[list[str] | None, list[str] | No
     mode_patterns = {
         "online": r"\bonline\b",
         "hybrid": r"\bhybrid\b",
-        "in_person": r"\bin[- ]person\b|\bon campus\b",
+        # Accepts "in person", "in-person", "in_person" (the API's own enum
+        # spelling, which students echo back after seeing it in responses),
+        # "on campus", and "face-to-face"/"face to face".
+        "in_person": r"\bin[-_ ]person\b|\bon campus\b|\bface[-_ ]to[-_ ]face\b",
     }
 
     soft_modes: list[str] = []
@@ -101,6 +104,29 @@ def _extract_delivery_modes(text: str) -> tuple[list[str] | None, list[str] | No
     return (hard_modes or None, soft_modes or None)
 
 
+_MODE_COUNT_PATTERN = re.compile(r"(\d+)\s+(online|hybrid|in[-_ ]person)\b", re.IGNORECASE)
+
+
+def _extract_delivery_mode_counts(text: str) -> list[DeliveryModeCount] | None:
+    """Finds "N <mode>" mentions, e.g. "2 online and 2 in-person courses" ->
+    [{mode: online, count: 2}, {mode: in_person, count: 2}].
+
+    This is a composition requirement (how many of each mode the *result
+    set* should include), not a filter (which modes are individually
+    acceptable -- that's `_extract_delivery_modes`, kept separate).
+    """
+    matches = _MODE_COUNT_PATTERN.findall(text)
+    if not matches:
+        return None
+
+    counts: dict[str, int] = {}
+    for count_str, mode_raw in matches:
+        mode = re.sub(r"[-_ ]", "_", mode_raw.lower())
+        counts[mode] = counts.get(mode, 0) + int(count_str)
+
+    return [DeliveryModeCount(mode=mode, count=count) for mode, count in counts.items()]
+
+
 def _extract_level(text: str) -> str | None:
     lowered = text.lower()
     if re.search(r"\bundergraduate\b", lowered):
@@ -110,14 +136,32 @@ def _extract_level(text: str) -> str | None:
     return None
 
 
+_DAY_EXCLUSION_TRIGGER = re.compile(
+    r"\b(?:no|without|avoid(?:ing)?|don'?t want|do not want)\b"
+)
+
+
 def _extract_excluded_days(text: str) -> list[str] | None:
+    """Finds every day name in the clause following a negation trigger.
+
+    A trigger only needs to precede the *first* day in a list -- "no
+    wednesday and tuesday classes" must exclude both days, not just the one
+    immediately adjacent to "no". The clause is bounded by the next sentence
+    break or the word "class(es)", so an unrelated day mentioned later in
+    the message isn't swept in.
+    """
     lowered = text.lower()
-    excluded = [
-        day
-        for day in DAYS_OF_WEEK
-        if re.search(rf"(no|without|avoid(?:ing)?)\s+{day}", lowered)
-    ]
-    return excluded or None
+    excluded: set[str] = set()
+
+    for trigger in _DAY_EXCLUSION_TRIGGER.finditer(lowered):
+        remainder = lowered[trigger.end():trigger.end() + 60]
+        clause_end = re.search(r"\bclasses?\b|[.!?]", remainder)
+        clause = remainder[: clause_end.start()] if clause_end else remainder
+        for day in DAYS_OF_WEEK:
+            if re.search(rf"\b{day}\b", clause):
+                excluded.add(day)
+
+    return sorted(excluded, key=DAYS_OF_WEEK.index) or None
 
 
 def _extract_time_window(text: str) -> tuple[str | None, str | None]:
@@ -184,6 +228,7 @@ def parse_requirement_rule_based(query: str) -> ParsedRequirement:
         topic=_extract_topic(query),
         hard_constraints=HardConstraints(
             delivery_modes=hard_modes,
+            delivery_mode_counts=_extract_delivery_mode_counts(query),
             earliest_start_time=earliest,
             latest_start_time=latest,
             exclude_days=_extract_excluded_days(query),

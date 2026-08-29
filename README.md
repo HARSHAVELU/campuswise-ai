@@ -38,8 +38,23 @@ See [`docs/architecture-proposal.md`](docs/architecture-proposal.md) for the ful
 - **Observability**: every request gets a short request id, logged with method/path/status/duration and echoed back as an `X-Request-ID` response header for client-to-server error correlation.
 - **Error handling**: a global exception handler guarantees no unhandled exception ever reaches a client as a raw traceback — it's logged in full server-side and returned as a clean `{"error_code": "internal_error", ...}` body.
 - **Evaluation**: `scripts/evaluate_rag.py` is a small, real, runnable regression harness — hit@k against known-answerable questions and abstention-accuracy against known-unanswerable ones, run against the actual retrieval pipeline and seeded syllabi.
-- **CI/CD**: `.github/workflows/ci.yml` — backend lint (ruff) + tests (pytest, currently 115 passing at 93% coverage) + advisory type-check (mypy) and dependency-vulnerability scan (pip-audit); frontend lint + type-check + build; then a Docker build of both images. Mypy and pip-audit are advisory (`continue-on-error`) since a fast-moving AI SDK's type stubs and OR-Tools' generated bindings currently produce false positives that don't reflect real runtime bugs — verified by extensive live testing throughout every phase.
+- **CI/CD**: `.github/workflows/ci.yml` — backend lint (ruff) + tests (pytest, currently 150 passing at ~91% coverage) + advisory type-check (mypy) and dependency-vulnerability scan (pip-audit); frontend lint + type-check + build; then a Docker build of both images. Mypy and pip-audit are advisory (`continue-on-error`) since a fast-moving AI SDK's type stubs and OR-Tools' generated bindings currently produce false positives that don't reflect real runtime bugs — verified by extensive live testing throughout every phase.
 - Along the way, fixed every *real* mypy finding in first-party code (a tuple-type narrowing issue in the assessment extractor, loosely-typed ranking caches, a Voyage embeddings return-type mismatch) and every ruff finding (mostly `F821` false positives from SQLAlchemy's string-based relationship type hints, resolved properly via `TYPE_CHECKING` imports rather than suppressed) — and caught a real test-suite fragility bug in the process: the rate limiter's in-memory store persisted across the whole pytest session, and the test suite was making exactly 10 auth calls against a 10/minute limit — one more test would have started failing tests unrelated to rate limiting. Fixed by resetting the limiter per test, with a regression test locking in the correct isolated behavior.
+
+**Post-MVP enhancement — richer catalog + AI Chat Assistant** (the brief's §20 "AI Chat Assistant," pulled forward):
+- **Bigger, richer catalog**: 6 departments (added Economics and Physics), **36 courses** (up from 20) each with a real hand-written description (not a templated one-liner), **29 professors** (up from 15), and **85 sections** across 3 terms — `scripts/seed_data.py`.
+- **A syllabus for every course**: `scripts/seed_syllabi.py` now template-generates a unique, internally-consistent syllabus for all 36 courses (not just 10), still producing the exact phrasing patterns the regex-based assessment extractor relies on, so exam format/grading/policy extraction works identically across the whole catalog. Caught and fixed two real generator bugs during testing: grading percentages that could sum past 100% (a participation line double-counted against the weight breakdown), and a syllabus that could describe a project as both "group" and "individual" in different sentences (a real self-contradiction in generated data) — both fixed at the source and verified clean across 200 generated samples.
+- **A floating chatbot on every page** (`components/ChatWidget.tsx`, mounted globally in `app/layout.tsx`): a real conversational interface, not a canned FAQ bot. Backend: `POST /ai/chat` (`app/agents/chat_pipeline.py`) classifies each message's intent (course/professor search, syllabus question, or schedule request) and routes it to the *exact same* deterministic, data-grounded pipelines the rest of the platform already uses (Recommendation Engine, Syllabus RAG, Schedule Optimizer) — the chatbot adds no new source of truth. Only the final phrasing is handed to an LLM, which receives the pipeline's structured result as explicitly labeled DATA (not instructions) and is forbidden from stating any fact not present in it; with no `ANTHROPIC_API_KEY`, a template renders the same structured result directly, so the chatbot is fully functional offline. Conversation history persists in the browser (`localStorage`) across reloads. Rate-limited (`30/minute`) like the other AI-backed endpoints.
+
+**Post-MVP enhancement — mode/day composition + parser bug fixes**: two real bugs surfaced through hands-on use of the chatbot and schedule builder — "2 online and 2 in-person" was silently collapsing to one mode (`in[- ]person` didn't match the API's own `in_person` spelling), and "no wednesday and tuesday classes" only excluded the first day in the list. Both are fixed at the regex level with regression tests. Beyond the bug fix, delivery-mode counts are now a real first-class concept (`HardConstraints.delivery_mode_counts`, distinct from the existing `delivery_modes` filter): `app/ranking/composition.py` selects the top-fit-score candidates *per requested mode* for search/chat results, and the OR-Tools schedule optimizer got genuine `sum(mode sections selected) >= count` constraints — not a post-hoc filter — plus a diagnostic (`diagnose_insufficient_mode_candidates`) that explains exactly which mode fell short when a schedule is infeasible.
+
+**Post-MVP enhancement — full observability stack**: a self-hosted, open-source equivalent of Prometheus/Grafana/Jaeger/Loki/Alertmanager-class observability, added end-to-end:
+- **Metrics** (`app/core/metrics.py`): `prometheus-fastapi-instrumentator` auto-instruments every request (count, latency histogram, in-progress) at `GET /metrics`; hand-defined counters/histograms track every AI provider call (`campuswise_ai_calls_total`, `campuswise_ai_call_duration_seconds`, `campuswise_ai_tokens_total`, `campuswise_fallback_total`) — always on, no external dependency.
+- **Distributed tracing** (`app/core/tracing.py`): OpenTelemetry auto-instruments FastAPI and SQLAlchemy, exporting to a bundled Jaeger instance, so a slow request's trace shows the real breakdown (verified live: a `/ai/chat` request's ~150ms total broken into ~26 individually-timed SQL spans) instead of one opaque duration. Off by default (`OTEL_ENABLED=false`) since most local/test runs have no collector; Docker Compose turns it on.
+- **LLM-specific observability** (`app/core/llm_telemetry.py`): one context manager (`track_llm_call`) wraps every one of the six AI provider call sites (4 Claude, 2 Voyage) and records a metric, a trace span, and a structured log line from a single call site — this is the platform's answer to "no LangSmith account to provision": real token/latency/outcome tracking without a third-party SaaS dependency.
+- **Log aggregation**: Promtail tails every container's Docker logs and ships them to Loki, queryable in Grafana (verified live: logs from all 11 services present, correctly labeled by service name).
+- **Alerting**: 5 real Prometheus alert rules (backend down, elevated 5xx rate, p95 latency, elevated AI-fallback rate, Redis down), routed through Alertmanager. Verified live end-to-end: stopped the Redis container, watched `RedisDown` transition pending → firing in Prometheus and land in Alertmanager within the rule's `for: 1m` window. Alertmanager ships with no external notification integration configured (no real Slack/email account to send to) — alerts fire and de-duplicate and are visible/queryable at `:9093`, and `infrastructure/alertmanager/alertmanager.yml` has commented-out, ready-to-fill-in Slack/email receiver examples.
+- **Dashboards**: a provisioned Grafana dashboard (`infrastructure/grafana/dashboards/campuswise-overview.json`) with 9 panels — request rate, latency percentiles, error rate, AI call metrics, fallback rate, token usage, Redis cache hit ratio, and a live log panel — auto-loaded on first boot, no manual setup.
 
 ## Tech Stack
 
@@ -74,9 +89,19 @@ docker compose up --build
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000 (docs at `/docs`)
+- Backend API: http://localhost:8000 (docs at `/docs`, metrics at `/metrics`)
 - Postgres: localhost:5432 (`campuswise` / `campuswise`)
 - Redis: localhost:6379
+
+**Observability stack** (also started by `docker compose up`, self-hosted/open-source — see "Manual Verification (Observability Stack)" below):
+
+| Service | URL | Purpose |
+|---|---|---|
+| Grafana | http://localhost:3001 | Dashboards (metrics + logs), anonymous admin access for local dev |
+| Prometheus | http://localhost:9090 | Metrics storage, alert rule evaluation |
+| Alertmanager | http://localhost:9093 | Alert routing/de-duplication |
+| Jaeger | http://localhost:16686 | Distributed tracing UI |
+| Loki | http://localhost:3100 | Log aggregation (query via Grafana Explore, not directly) |
 
 ### Option B — Run backend and frontend locally
 
@@ -117,7 +142,7 @@ alembic upgrade head
 
 ```bash
 cd backend
-pytest -q                              # 115 tests, ~93% coverage
+pytest -q                              # 150 tests, ~91% coverage
 ruff check .                           # lint
 mypy app --ignore-missing-imports      # type check (advisory — see CI notes below)
 ```
@@ -268,19 +293,58 @@ With the stack running:
 3. Send 11+ rapid `POST /api/v1/auth/login` requests — expect `401` (bad credentials) for the first 10 and `429` (rate limited) after that.
 4. Trigger a real server error (e.g. stop the `postgres` container mid-request) and confirm the response body is a clean `{"error_code": "internal_error", ...}` JSON object, never a Python traceback.
 5. Run `python scripts/evaluate_rag.py` inside the backend container (after `seed_data.py` + `seed_syllabi.py`) — expect a 100% hit rate on the answerable questions and correct abstention on the unanswerable one.
-6. `cd backend && ruff check .` and `pytest -q` — expect both clean (115 passing).
+6. `cd backend && ruff check .` and `pytest -q` — expect both clean (150 passing).
+
+## Manual Verification (Chatbot + Expanded Catalog)
+
+With the stack running and all three seed scripts run (reseed with `docker compose down -v` first if you already had the smaller 20-course catalog loaded):
+
+1. `GET /api/v1/courses?limit=100` — expect 36 courses across 6 departments (CS, MATH, STAT, BUSN, ECON, PHYS), each with a distinct, non-templated `description`.
+2. `GET /api/v1/assessment/course/{any course id}` — expect every course to have assessment metadata now (previously only 10 of 20 did).
+3. Visit `http://localhost:3000` (or any page) — a blue chat bubble should appear in the bottom-right corner on every page.
+4. Click it open and try the suggested prompts, or type your own:
+   - *"Find me an easy python elective"* → should return real ranked courses with fit scores.
+   - *"Does CS 4375 have a group project?"* → should resolve the course by code and answer from its real syllabus, with a citation.
+   - *"Build me a 12 credit schedule, no Friday classes"* → should return a real optimized schedule summary.
+5. Refresh the page — the conversation should still be there (persisted in `localStorage`).
+6. Click **Clear** — history should reset.
+7. Send 31+ messages within a minute — expect a rate-limit error after the 30th.
+
+## Manual Verification (Observability Stack)
+
+With the stack running (`docker compose up -d --build` picks up the new services):
+
+| Tool | URL | What to check |
+|---|---|---|
+| Backend metrics | http://localhost:8000/metrics | Raw Prometheus text format — search for `campuswise_ai_calls_total` or `campuswise_fallback_total` |
+| Prometheus | http://localhost:9090 | **Status → Targets**: `campuswise-backend`, `redis`, `prometheus` all `UP`. **Alerts**: 5 rules loaded, all `inactive` in a healthy state |
+| Grafana | http://localhost:3001 | Anonymous admin access enabled for local dev — open the **CampusWise Overview** dashboard (auto-provisioned); should show live request/latency/AI-call panels |
+| Jaeger | http://localhost:16686 | Select service `campuswise-backend`, **Find Traces** — click into any `POST /api/v1/*` trace to see its child SQL spans individually timed |
+| Loki (via Grafana) | http://localhost:3001/explore | Datasource **Loki**, query `{service="backend"}` — should show the same structured log lines the terminal shows |
+| Alertmanager | http://localhost:9093 | Empty under normal conditions; see the live test below to see it populate |
+
+**A real end-to-end alert test** (safe — it only touches this local demo stack):
+```bash
+docker compose stop redis
+# wait ~90s (Prometheus's 10s scrape interval + the alert rule's `for: 1m`)
+curl -s http://localhost:9093/api/v2/alerts | python -m json.tool   # expect RedisDown, state "active"
+docker compose start redis                                          # alert clears on its own shortly after
+```
+
+1. Generate a little AI traffic (`curl -X POST http://localhost:8000/api/v1/ai/chat -H "Content-Type: application/json" -d '{"message": "find me a python class", "history": []}'`), wait ~10s, then query `curl "http://localhost:9090/api/v1/query?query=campuswise_fallback_total"` — expect a real result with `reason="no_api_key"` (no `ANTHROPIC_API_KEY` set by default).
+2. In Jaeger, find that same request's trace — expect one `POST /api/v1/ai/chat` parent span with several `SELECT` child spans underneath it, each with its own duration.
 
 ## Roadmap
 
 See [`docs/architecture-proposal.md`](docs/architecture-proposal.md#g-development-roadmap) for the full 10-phase roadmap (University Data → Course/Professor UI → AI Search → Recommendation Engine → Syllabus RAG → Exam Intelligence → Schedule Optimization → Degree Planning → Production Hardening).
 
-## Known Limitations (Phase 10)
+## Known Limitations (Observability)
 
 - All course/professor/grade/syllabus data is synthetic sample data for a fictional "Northlake University" — see the Data Provenance Disclaimer below.
 - The deterministic embedding fallback (used when `VOYAGE_API_KEY` is unset) is a bag-of-words hashing trick, not a trained semantic model — it supports exact/overlapping vocabulary well but won't catch paraphrases or synonyms the way a real embedding model would.
 - Dense similarity search runs in application code over a per-course/professor candidate set rather than a native `pgvector` `ORDER BY … <=>` query — fine at this dataset's scale, but a scaling point worth revisiting before a large real syllabus corpus.
 - The lexical half of hybrid retrieval is a simple term-overlap score, not true BM25 (see `app/retrieval/hybrid_search.py`); a production deployment would swap in Postgres full-text search or a dedicated search engine.
-- Only 10 of the 20 seeded courses have a syllabus, so only those have assessment metadata; a course without one correctly shows "not available" rather than a guess.
+- All 36 seeded courses now have a syllabus and assessment metadata (previously only 10 of 20 did); a course without one (if you add new courses without reseeding syllabi) still correctly shows "not available" rather than a guess.
 - The rule-based assessment extractor is reliable on the seeded syllabi's consistent phrasing but is not a general-purpose parser for arbitrary real-world syllabus wording — the LLM extractor is the primary path for that, and is what a production deployment would rely on.
 - `assessment_metadata` is keyed to a single syllabus per course/professor pair; if a professor's exam format changes across terms, this schema doesn't yet track multiple terms' worth of syllabi per pairing or flag disagreement between them (brief §28's "varied across semesters" case is a known gap).
 - `/schedule/generate` doesn't yet accept a specific list of required courses to force-include (e.g. "make sure CS 4375 is in there") — it optimizes purely over the discovered candidate pool. Required-course pinning is a straightforward extension of the existing `required_course_ids` optimizer parameter, just not wired to the API yet.
@@ -299,8 +363,18 @@ See [`docs/architecture-proposal.md`](docs/architecture-proposal.md#g-developmen
 - Rate limiting uses in-memory storage, correct for a single backend instance; a multi-instance deployment would need a shared store (Redis) so limits are enforced consistently across instances.
 - The RAG evaluation script is a small fixed regression check (hit@k, abstention accuracy) against the seeded dataset, not the fuller continuous-evaluation framework described in the architecture doc (context precision/recall, faithfulness, citation correctness against a managed golden dataset). There's no equivalent recommendation-ranking evaluation harness yet (precision@k, NDCG@k) — that would need historical interaction data this synthetic dataset doesn't have.
 - Mypy and pip-audit run in CI as advisory (`continue-on-error`), not blocking — current findings are third-party stub mismatches (OR-Tools' generated bindings, the Anthropic SDK's fast-moving overload signatures, slowapi's handler typing), not real bugs; every finding in first-party code was fixed.
+- The chatbot's conversation history lives only in the browser's `localStorage`, not the database — there's no `chat_sessions`/`chat_messages` persistence yet (the schema exists in the architecture doc but isn't built), so history doesn't sync across devices and is lost if the browser storage is cleared.
+- The chatbot's intent classification is keyword-based (same rule-based-fallback philosophy as the rest of the platform), not an LLM-driven router — a message that doesn't contain any of the syllabus/schedule trigger words defaults to course/professor search, which is usually right but not infallible.
+- The chatbot doesn't yet handle degree-planning questions ("what do I still need for my CS degree?") since those endpoints require authentication and the chat widget doesn't carry a login session — a natural next integration.
+- Syllabus content behind the chatbot's "syllabus" intent is template-generated for 26 of the 36 courses (10 are still the original hand-written examples from Phase 6/7) — realistic and internally consistent, but not real institutional documents, same disclaimer as the rest of the dataset.
 - No HTTPS/TLS termination, secrets manager, or production deployment manifests (Kubernetes/ECS/etc.) yet — Docker Compose is a local/demo setup, not a production deployment target.
 - Security headers (CSP, HSTS, X-Frame-Options) aren't set yet; would typically be added at a reverse-proxy/CDN layer in front of the app rather than in FastAPI itself.
+- Alertmanager has no external notification integration configured out of the box (no real Slack workspace or SMTP relay to send to) — alerts fire, de-duplicate, and are queryable at `:9093`, but nothing pages a human until you fill in `infrastructure/alertmanager/alertmanager.yml`'s commented-out Slack/email examples with real credentials.
+- Rate limiting's in-memory storage (Phase 10) is now visible cross-service in the observability stack, but the underlying limitation is unchanged: correct for one backend instance, would need a shared store for multiple instances.
+- Loki's retention is set to 7 days (`infrastructure/loki/loki-config.yml`) and storage is local-filesystem-backed — appropriate for a local/demo stack, not a durable production log store.
+- Traces, metrics, and logs aren't correlated by a shared trace ID in the log lines themselves yet (the request-ID from `X-Request-ID` and the OTel trace ID are two different identifiers) — jumping from "this log line" to "this exact trace" in Jaeger is a manual step (matching request path/timestamp), not a one-click Grafana exemplar link yet.
+- The frontend and the six infra containers (Prometheus/Grafana/Jaeger/Loki/Promtail/Alertmanager) aren't instrumented themselves — only the FastAPI backend emits app-level metrics/traces; the infra containers' own health is visible via their standard `/metrics` or `/-/ready` endpoints, not through the custom dashboard.
+- Promtail discovers containers via the Docker socket (`/var/run/docker.sock`) and reads log files from `/var/lib/docker/containers` — this assumes Docker Desktop's default logging driver (json-file) and the default socket path; a differently configured Docker installation may need the mount paths adjusted.
 
 ## Data Provenance Disclaimer
 

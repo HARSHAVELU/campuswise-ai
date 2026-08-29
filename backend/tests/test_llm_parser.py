@@ -23,6 +23,8 @@ def test_parses_valid_tool_use_response():
     }
     mock_response = MagicMock()
     mock_response.content = [tool_block]
+    mock_response.usage.input_tokens = 120
+    mock_response.usage.output_tokens = 45
 
     with patch("app.agents.llm_parser.get_settings") as mock_settings, patch(
         "app.agents.llm_parser.anthropic.Anthropic"
@@ -46,6 +48,8 @@ def test_raises_when_no_tool_use_block_returned():
     text_block.type = "text"
     mock_response = MagicMock()
     mock_response.content = [text_block]
+    mock_response.usage.input_tokens = 80
+    mock_response.usage.output_tokens = 10
 
     with patch("app.agents.llm_parser.get_settings") as mock_settings, patch(
         "app.agents.llm_parser.anthropic.Anthropic"

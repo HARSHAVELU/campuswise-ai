@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     voyage_embedding_model: str = Field(default="voyage-3-lite")
     voyage_rerank_model: str = Field(default="rerank-2-lite")
 
+    # Distributed tracing (OpenTelemetry). Off by default -- exporting to a
+    # collector that doesn't exist is harmless (the SDK just logs a warning
+    # in the background), but there's no reason to pay the setup cost in
+    # plain local/test runs where no collector is running. Docker Compose
+    # turns this on and points it at the bundled Jaeger service.
+    otel_enabled: bool = Field(default=False)
+    otel_exporter_endpoint: str = Field(default="localhost:4317")
+    otel_service_name: str = Field(default="campuswise-backend")
+
 
 @lru_cache
 def get_settings() -> Settings:

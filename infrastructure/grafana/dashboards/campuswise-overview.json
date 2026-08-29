@@ -1,0 +1,137 @@
+{
+  "title": "CampusWise Overview",
+  "uid": "campuswise-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"campuswise-backend\"}[1m])) by (status)",
+          "legendFormat": "status {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"campuswise-backend\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"campuswise-backend\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"campuswise-backend\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "5xx error rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"campuswise-backend\", status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"campuswise-backend\"}[5m]))",
+          "legendFormat": "5xx ratio"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "title": "AI provider calls, by outcome",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(campuswise_ai_calls_total[5m])) by (provider, purpose, outcome)",
+          "legendFormat": "{{provider}}/{{purpose}} ({{outcome}})"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI call latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(campuswise_ai_call_duration_seconds_bucket[5m])) by (le, provider, purpose))",
+          "legendFormat": "{{provider}}/{{purpose}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Deterministic fallback rate, by reason",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(campuswise_fallback_total[5m])) by (purpose, reason)",
+          "legendFormat": "{{purpose}} ({{reason}})"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "AI token usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(campuswise_ai_tokens_total[5m])) by (provider, purpose, direction)",
+          "legendFormat": "{{provider}}/{{purpose}} ({{direction}})"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Redis cache hit ratio",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "campuswise-prometheus" },
+      "targets": [
+        {
+          "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))",
+          "legendFormat": "hit ratio"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+    },
+    {
+      "id": 9,
+      "title": "Recent backend logs",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "loki", "uid": "campuswise-loki" },
+      "targets": [
+        {
+          "expr": "{service=\"backend\"}"
+        }
+      ]
+    }
+  ]
+}

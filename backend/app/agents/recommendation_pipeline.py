@@ -2,13 +2,15 @@
 
 Query -> RequirementParserAgent -> course discovery -> section candidates for
 the active planning term -> hard constraint filter -> feature scoring ->
-Fit Score -> explanation -> ranked recommendations.
+Fit Score -> explanation -> ranked recommendations -> optional composition
+(e.g. "2 online and 2 in-person") over the ranked set.
 """
 
 from sqlalchemy.orm import Session
 
 from app.agents.course_discovery import discover_courses
 from app.agents.requirement_parser import parse_requirement
+from app.ranking.composition import compose_by_delivery_mode_counts
 from app.ranking.engine import rank_sections
 from app.repositories.section_repository import SectionRepository
 from app.schemas.recommendation import RecommendationResponse
@@ -47,6 +49,12 @@ def run_course_recommendations(db: Session, query: str, limit: int = 10) -> Reco
         label = EXCLUSION_REASON_LABELS.get(reason, reason)
         notes.append(f"{count} section(s) excluded: {label}.")
 
-    return RecommendationResponse(
-        parsed=parsed, recommendations=recommendations[:limit], notes=notes
-    )
+    if parsed.hard_constraints.delivery_mode_counts:
+        recommendations, composition_notes = compose_by_delivery_mode_counts(
+            recommendations, parsed.hard_constraints.delivery_mode_counts
+        )
+        notes.extend(composition_notes)
+    else:
+        recommendations = recommendations[:limit]
+
+    return RecommendationResponse(parsed=parsed, recommendations=recommendations, notes=notes)

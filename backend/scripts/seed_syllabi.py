@@ -1,15 +1,23 @@
-"""Seed synthetic syllabus documents for the RAG pipeline.
+"""Seed synthetic syllabus documents for the RAG pipeline -- one per course.
 
 IMPORTANT: Every syllabus below is fictional, generated for demonstration
 purposes only, and tied to the synthetic "Northlake University" dataset
 created by seed_data.py. It must never be presented as a real institutional
 document (see docs/architecture-proposal.md, "Data Provenance Disclaimer").
 
+Syllabus text is template-generated (seeded per course code, so reseeding is
+deterministic) rather than hand-written per course, so every course in the
+catalog gets real, queryable exam/grading/policy content -- while keeping
+the exact phrasing patterns (e.g. "Exam Format:", "is worth X%", "proctored
+via X") that app.ingestion.assessment_extraction_rules' regex extractor
+relies on, so structured extraction works identically for every course.
+
 Run after seed_data.py:
     python scripts/seed_data.py
     python scripts/seed_syllabi.py
 """
 
+import random
 import sys
 from pathlib import Path
 
@@ -17,135 +25,139 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database.session import SessionLocal  # noqa: E402
 from app.ingestion.syllabus_ingestion import ingest_syllabus  # noqa: E402
-from app.models import Course, Professor, Syllabus, Term, University  # noqa: E402
+from app.models import Course, Professor, Section, Syllabus, Term, University  # noqa: E402
 
-# (course_code, professor_name, source_document, syllabus_text)
-SYLLABI = [
-    (
-        "CS 1336",
-        "Dr. Wei Chen",
-        "CS1336_Fall2025.pdf",
-        """Course Policies for CS 1336 - Programming Fundamentals
+PROCTORING_TOOLS = ["Honorlock", "LockDown Browser", "ProctorU"]
 
-Attendance is required and tracked. More than 4 unexcused absences will lower your final letter grade by one step.
 
-Grading Breakdown: Weekly quizzes are worth 15% of the final grade. Programming assignments are worth 35%. The midterm exam is worth 20% and the final exam is worth 30%.
+def _exam_sentence(role: str, rng: random.Random) -> str:
+    """role: 'midterm' or 'final'."""
+    style = rng.choice(["online_open", "online_proctored_closed", "in_person_closed", "in_person_open"])
+    if style == "online_open":
+        return f"The {role} exam is administered online through the course portal and is open-book."
+    if style == "online_proctored_closed":
+        proctor = rng.choice(PROCTORING_TOOLS)
+        return f"The {role} exam is administered online, proctored via {proctor}, and closed-book."
+    if style == "in_person_closed":
+        return f"The {role} exam is administered in person and is closed-book."
+    return f"The {role} exam is administered in person and is open-book, open-note."
 
-Exam Format: Both the midterm and final exams are administered in person, closed-book, and closed-laptop. Students may bring one handwritten note card to each exam.
 
-Late Policy: Programming assignments submitted late lose 5% per day, up to a maximum of 3 late days per assignment. No exceptions after 3 days without a documented emergency.""",
-    ),
-    (
-        "CS 4375",
-        "Dr. Elena Marquez",
-        "CS4375_Fall2025.pdf",
-        """Course Policies for CS 4375 - Introduction to Machine Learning
+def generate_syllabus_text(course_code: str, course_title: str, professor_name: str, seed: int) -> str:
+    rng = random.Random(seed)
 
-Attendance is not mandatory but strongly encouraged. Class participation counts for 5% of the final grade.
+    exam_pattern = rng.choice(
+        ["both_exams", "midterm_only", "final_only", "no_exams", "no_exams"]
+    )
+    has_midterm = exam_pattern in ("both_exams", "midterm_only")
+    has_final = exam_pattern in ("both_exams", "final_only")
+    has_project = rng.random() < 0.7
+    is_group_project = has_project and rng.random() < 0.5
+    has_quizzes = rng.random() < 0.4
+    has_presentation = rng.random() < 0.3 or not (has_midterm or has_final)
+    participation_graded = rng.random() < 0.5
 
-Grading Breakdown: Homework assignments are worth 30% of the final grade. There is a midterm exam worth 20% and a comprehensive final exam worth 35%. A group project counts for the remaining 10%.
+    # Build the full list of graded components ONCE, so every percentage
+    # (including participation) is drawn from the same 100%-summing pool --
+    # no component is ever described twice with conflicting weights.
+    components: list[str] = ["homework assignments"]
+    if has_quizzes:
+        components.append("weekly quizzes")
+    if participation_graded:
+        components.append("class participation")
+    if has_project:
+        components.append("a group project" if is_group_project else "an individual project")
+    if has_midterm:
+        components.append("a midterm exam")
+    if has_final:
+        components.append("a final exam")
+    if not has_midterm and not has_final and not has_project:
+        components.append("a final presentation")
 
-Exam Format: The midterm exam is administered online through the course portal and is open-book. The final exam is also online, proctored via Honorlock, and closed-book.
+    n = len(components)
+    base = 100 // n
+    pcts = [base] * n
+    for i in range(100 - base * n):
+        pcts[i % n] += 1
+    rng.shuffle(pcts)
+    weights = dict(zip(components, pcts))
 
-Late Policy: Late assignments are accepted up to 48 hours after the deadline with a 10% per day penalty. No submissions are accepted after 48 hours without prior approval.""",
-    ),
-    (
-        "CS 4395",
-        "Dr. Marcus Fielding",
-        "CS4395_Fall2025.pdf",
-        """Course Policies for CS 4395 - Natural Language Processing
+    grading_sentences = []
+    for label, pct in weights.items():
+        if label.startswith(("a group", "an individual")):
+            verb = "counts for"
+        elif label.endswith(("assignments", "quizzes")):
+            verb = "are worth"
+        else:
+            verb = "is worth"
+        grading_sentences.append(f"{label[0].upper() + label[1:]} {verb} {pct}%.")
+    grading_paragraph = "Grading Breakdown: " + " ".join(grading_sentences)
 
-This course has no midterm or final exam. Grading Breakdown: Four programming assignments are worth 15% each (60% total). A semester-long team research project counts for 30%, including a final presentation. Class participation and peer review counts for 10%.
+    if rng.random() < 0.4:
+        attendance_line = (
+            "Attendance is required and tracked. More than 4 unexcused absences will lower your "
+            "final letter grade by one step."
+        )
+    elif participation_graded:
+        attendance_line = (
+            f"Attendance is not mandatory but strongly encouraged. Class participation counts for "
+            f"{weights['class participation']}% of the final grade, as noted above."
+        )
+    else:
+        attendance_line = "Attendance is recorded but not directly graded."
 
-There is no traditional exam in this course -- mastery is assessed entirely through assignments and the project.
+    if not has_midterm and not has_final:
+        exam_paragraph = (
+            "Exam Format: This course has no midterm or final exam. Mastery is assessed entirely "
+            "through assignments" + (" and the project" if has_project else "") + "."
+        )
+    else:
+        exam_lines = []
+        if has_midterm:
+            exam_lines.append(_exam_sentence("midterm", rng))
+        else:
+            exam_lines.append("There is no midterm exam in this course.")
+        if has_final:
+            exam_lines.append(_exam_sentence("final", rng))
+        else:
+            exam_lines.append(
+                "There is no separate final exam; the project serves as the final assessment."
+            )
+        exam_paragraph = "Exam Format: " + " ".join(exam_lines)
 
-Late Policy: Assignments are accepted up to 24 hours late with a 15% penalty. The final project has no late submissions accepted, since presentations are scheduled during the last week of class.""",
-    ),
-    (
-        "CS 4365",
-        "Dr. Daniel Osei",
-        "CS4365_Fall2025.pdf",
-        """Course Policies for CS 4365 - Artificial Intelligence
+    project_line = ""
+    if has_project:
+        if is_group_project:
+            project_line = rng.choice(
+                [
+                    "Students work in teams of three to four on a semester-long group project.",
+                    "A group project, worked on in teams, is due in the final weeks of the course.",
+                ]
+            )
+        else:
+            project_line = "An individual project applies course concepts to a self-selected problem."
+        if has_presentation:
+            project_line += " A final presentation is required."
 
-Attendance is recorded but not directly graded. Grading Breakdown: Problem sets are worth 25%, a midterm exam is worth 25%, a final exam is worth 35%, and a search-algorithm implementation project is worth 15%.
+    late_penalty = rng.choice([5, 10, 15])
+    late_window = rng.choice([24, 48, 72])
+    late_policy = (
+        f"Late Policy: Assignments are accepted up to {late_window} hours after the deadline with "
+        f"a {late_penalty}% per day penalty. No submissions are accepted after that window without "
+        f"prior approval."
+    )
 
-Exam Format: Both the midterm and final exams are administered in person and are closed-book. Laptops and phones must be closed and put away during exams; only a basic calculator is permitted.
+    parts = [
+        f"Course Policies for {course_code} - {course_title}",
+        attendance_line,
+        grading_paragraph,
+        exam_paragraph,
+    ]
+    if project_line:
+        parts.append(project_line)
+    parts.append(late_policy)
 
-Late Policy: Problem sets are not accepted late under any circumstances, since solutions are discussed in class immediately after the deadline.""",
-    ),
-    (
-        "CS 4347",
-        "Dr. Samuel Okafor",
-        "CS4347_Fall2025.pdf",
-        """Course Policies for CS 4347 - Database Systems
-
-Attendance at weekly labs is mandatory; lecture attendance is optional. Grading Breakdown: Weekly lab assignments are worth 30%. A database design project is worth 25%. The midterm exam is worth 20% and the final exam is worth 25%.
-
-Exam Format: Both exams are administered online through the course portal and are open-book, open-note. Students may reference course materials but may not collaborate with other students during the exam window.
-
-Late Policy: Lab assignments lose 10% per day late, up to 3 days. The design project has a hard deadline with no late submissions accepted.""",
-    ),
-    (
-        "CS 3377",
-        "Dr. Priya Natarajan",
-        "CS3377_Fall2025.pdf",
-        """Course Policies for CS 3377 - Software Engineering
-
-This course has no exams. Grading Breakdown: Students work in teams of four on a semester-long software project, delivered in three milestones worth 20% each (60% total). Individual code reviews and peer evaluations are worth 20%. A final team presentation and demo is worth 20%.
-
-There is no midterm or final exam in this course; all assessment is project-based.
-
-Late Policy: Milestone deliverables submitted late lose 5% per day. Teams are expected to manage their own schedule using the sprint planning process taught in the first two weeks.""",
-    ),
-    (
-        "MATH 2413",
-        "Dr. Ana Rocha",
-        "MATH2413_Fall2025.pdf",
-        """Course Policies for MATH 2413 - Calculus I
-
-Attendance is required; more than 6 absences results in a failing grade regardless of exam performance. Grading Breakdown: Weekly homework is worth 10%. There are three unit exams worth 20% each (60% total) and a comprehensive final exam worth 30%.
-
-Exam Format: All exams, including the final, are administered in person and are closed-book. Graphing calculators are not permitted; only a basic scientific calculator may be used.
-
-Late Policy: Homework is not accepted late. If you miss a unit exam with a documented excuse, your final exam score will be substituted for that exam's grade.""",
-    ),
-    (
-        "STAT 4351",
-        "Dr. Olivia Bergstrom",
-        "STAT4351_Fall2025.pdf",
-        """Course Policies for STAT 4351 - Applied Statistics with Python
-
-Attendance is not tracked. Grading Breakdown: Weekly Python-based data analysis assignments are worth 40%. A midterm exam is worth 25% and a final data analysis project (with a written report) is worth 35%. There is no traditional final exam.
-
-Exam Format: The midterm exam is administered online through the course portal and is open-book, open-notebook -- students may use their own Python environment during the exam.
-
-Late Policy: Assignments are accepted up to 72 hours late with a 5% per day penalty. The final project deadline is firm and set by the university's end-of-term deadline.""",
-    ),
-    (
-        "BUSN 3305",
-        "Dr. Claire Whitmore",
-        "BUSN3305_Fall2025.pdf",
-        """Course Policies for BUSN 3305 - Business Analytics
-
-Attendance and in-class participation is worth 10% of the final grade. Grading Breakdown: Two case study write-ups are worth 20% each (40% total). A group project with a client-style presentation is worth 35%. There is no midterm or final exam.
-
-This course is entirely case-study and project based; mastery of analytics tools is assessed through applied deliverables rather than timed exams.
-
-Late Policy: Case study write-ups lose 10% per day late, up to 2 days, after which they are not accepted. Group project deadlines are fixed and coordinated with client presentation scheduling.""",
-    ),
-    (
-        "BUSN 4325",
-        "Dr. Victor Adeyemi",
-        "BUSN4325_Fall2025.pdf",
-        """Course Policies for BUSN 4325 - Business Python Applications
-
-Attendance is optional but recommended given the hands-on lab format. Grading Breakdown: Weekly lab exercises are worth 30%. A midterm exam is worth 20%. A capstone automation project is worth 35%. Class participation is worth 15%.
-
-Exam Format: The midterm exam is administered online through the course portal and is open-book. There is no separate final exam; the capstone project serves as the final assessment.
-
-Late Policy: Lab exercises are accepted up to 48 hours late with a 10% per day penalty. The capstone project has a firm deadline aligned with the final presentation day.""",
-    ),
-]
+    return "\n\n".join(parts)
 
 
 def seed() -> None:
@@ -161,16 +173,27 @@ def seed() -> None:
             return
 
         term = db.query(Term).filter_by(university_id=university.id, name="Fall 2025").first()
+        courses = db.query(Course).filter_by(university_id=university.id).all()
 
         ingested = 0
-        for course_code, professor_name, source_document, text in SYLLABI:
-            course = db.query(Course).filter_by(university_id=university.id, code=course_code).first()
-            professor = (
-                db.query(Professor).filter_by(university_id=university.id, name=professor_name).first()
+        for course in courses:
+            # Prefer the professor teaching this course in Fall 2025 if a section
+            # exists there; otherwise fall back to any section's professor.
+            section = (
+                db.query(Section)
+                .filter_by(course_id=course.id, term_id=term.id if term else None)
+                .first()
+                or db.query(Section).filter_by(course_id=course.id).first()
             )
-            if course is None or professor is None:
-                print(f"Skipping {course_code} / {professor_name}: not found in seeded data.")
+            professor: Professor | None = section.professor if section else None
+            if professor is None:
+                print(f"Skipping {course.code}: no professor assigned to any section.")
                 continue
+
+            source_document = f"{course.code.replace(' ', '')}_Fall2025.pdf"
+            syllabus_text = generate_syllabus_text(
+                course.code, course.title, professor.name, seed=hash(course.code) & 0xFFFFFFFF
+            )
 
             ingest_syllabus(
                 db,
@@ -178,14 +201,17 @@ def seed() -> None:
                 course_id=course.id,
                 professor_id=professor.id,
                 term_id=term.id if term else None,
-                title=f"{course_code} {term.name if term else ''} Syllabus".strip(),
+                title=f"{course.code} {term.name if term else ''} Syllabus".strip(),
                 source_document=source_document,
-                raw_text=text,
+                raw_text=syllabus_text,
             )
             ingested += 1
 
         db.commit()
-        print(f"Ingested {ingested} synthetic syllabus documents for '{university.name}' ({university.short_name}).")
+        print(
+            f"Ingested {ingested} synthetic syllabus documents for "
+            f"'{university.name}' ({university.short_name})."
+        )
     finally:
         db.close()
 

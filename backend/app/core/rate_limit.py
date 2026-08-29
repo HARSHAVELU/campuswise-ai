@@ -13,5 +13,6 @@ from slowapi.util import get_remote_address
 
 DEFAULT_LIMITS: list[str | Callable[..., str]] = ["120/minute"]
 AUTH_LIMIT = "10/minute"
+CHAT_LIMIT = "30/minute"
 
 limiter = Limiter(key_func=get_remote_address, default_limits=DEFAULT_LIMITS)

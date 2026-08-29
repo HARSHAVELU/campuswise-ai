@@ -67,3 +67,43 @@ def test_online_course_and_online_exams_both_detected_independently():
     parsed = parse_requirement_rule_based("I want an online course with online exams.")
     assert parsed.hard_constraints.delivery_modes == ["online"]
     assert parsed.soft_preferences.prefer_online_exams is True
+
+
+def test_online_and_in_person_both_detected_with_underscore_spelling():
+    """Regression: students echo back the API's own enum spelling
+    ("in_person") after seeing it in a response; the parser must recognize
+    it exactly like "in person" or "in-person"."""
+    parsed = parse_requirement_rule_based("suggest me 2 online and 2 in_person courses")
+    assert set(parsed.hard_constraints.delivery_modes or []) == {"online", "in_person"}
+
+
+def test_online_and_in_person_detected_with_hyphen_and_space_spelling():
+    parsed = parse_requirement_rule_based("I want online and in-person options")
+    assert set(parsed.hard_constraints.delivery_modes or []) == {"online", "in_person"}
+    parsed2 = parse_requirement_rule_based("I want online and in person options")
+    assert set(parsed2.hard_constraints.delivery_modes or []) == {"online", "in_person"}
+
+
+def test_no_wednesday_and_tuesday_excludes_both_days():
+    """Regression: a single negation trigger followed by an 'and'-joined day
+    list must exclude every day in the list, not just the one immediately
+    adjacent to the trigger word."""
+    parsed = parse_requirement_rule_based("no wednesday and tuesday classes")
+    assert parsed.hard_constraints.exclude_days == ["tuesday", "wednesday"]
+
+
+def test_dont_want_is_recognized_as_a_day_exclusion_trigger():
+    parsed = parse_requirement_rule_based("I dont want wednesday and tuesday classes")
+    assert parsed.hard_constraints.exclude_days == ["tuesday", "wednesday"]
+
+    parsed2 = parse_requirement_rule_based("I do not want monday, wednesday, or friday classes")
+    assert parsed2.hard_constraints.exclude_days == ["monday", "wednesday", "friday"]
+
+
+def test_day_exclusion_does_not_leak_into_unrelated_later_clause():
+    """The exclusion clause is bounded by 'class(es)' or sentence-end, so an
+    unrelated day mentioned later in the message isn't swept in."""
+    parsed = parse_requirement_rule_based(
+        "no wednesday classes, but I'm free on friday for office hours"
+    )
+    assert parsed.hard_constraints.exclude_days == ["wednesday"]

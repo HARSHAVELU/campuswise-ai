@@ -1,0 +1,64 @@
+groups:
+  - name: campuswise-backend
+    rules:
+      - alert: BackendDown
+        expr: up{job="campuswise-backend"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "CampusWise backend is unreachable"
+          description: "Prometheus has not been able to scrape /metrics on the backend for 30s."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="campuswise-backend", status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="campuswise-backend"}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated 5xx error rate"
+          description: "More than 5% of requests in the last 5 minutes returned a 5xx status."
+
+      - alert: HighRequestLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="campuswise-backend"}[5m])) by (le)
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 request latency above 3s"
+          description: "95th percentile request latency has stayed above 3 seconds for 5 minutes."
+
+      - alert: HighAIProviderFallbackRate
+        expr: sum(rate(campuswise_fallback_total{reason="llm_error"}[15m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI providers failing -- serving deterministic fallbacks"
+          description: >
+            The platform is falling back from Claude/Voyage to rule-based logic due to
+            provider errors more than expected (excludes the always-expected "no_api_key"
+            fallback reason). Check Anthropic/Voyage status and API key validity.
+
+      - alert: RedisDown
+        # NOTE: this must be redis_up (the exporter's own gauge for whether
+        # *it* can reach Redis), not up{job="redis"} (whether Prometheus can
+        # reach the exporter container) -- the exporter process itself stays
+        # up and scrapable even when Redis is unreachable, so up{job="redis"}
+        # never goes to 0 in that case. Caught via a live kill-redis test.
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis is unreachable"
+          description: >
+            Not fatal on its own -- the cache layer degrades to always-compute -- but
+            confirms whether recent latency increases are cache-related.

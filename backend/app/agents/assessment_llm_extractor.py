@@ -13,9 +13,11 @@ import logging
 import anthropic
 
 from app.core.config import get_settings
+from app.core.llm_telemetry import track_llm_call
 
 logger = logging.getLogger(__name__)
 
+_PURPOSE = "assessment_extraction"
 _TOOL_NAME = "extract_assessment_metadata"
 
 _TOOL_SCHEMA = {
@@ -79,14 +81,17 @@ def extract_assessment_with_llm(syllabus_text: str) -> dict:
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            tools=[_TOOL_SCHEMA],
-            tool_choice={"type": "tool", "name": _TOOL_NAME},
-            messages=[{"role": "user", "content": syllabus_text}],
-        )
+        with track_llm_call("anthropic", _PURPOSE, settings.anthropic_model) as rec:
+            response = client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=1024,
+                system=_SYSTEM_PROMPT,
+                tools=[_TOOL_SCHEMA],
+                tool_choice={"type": "tool", "name": _TOOL_NAME},
+                messages=[{"role": "user", "content": syllabus_text}],
+            )
+            rec.input_tokens = response.usage.input_tokens
+            rec.output_tokens = response.usage.output_tokens
     except anthropic.APIError as exc:
         raise AssessmentLLMError(f"Anthropic API call failed: {exc}") from exc
 

@@ -13,6 +13,7 @@ import logging
 import anthropic
 
 from app.core.config import get_settings
+from app.core.llm_telemetry import track_llm_call
 from app.schemas.ai_search import HardConstraints, ParsedRequirement, SoftPreferences
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,24 @@ _TOOL_SCHEMA = {
                     "delivery_modes": {
                         "type": ["array", "null"],
                         "items": {"type": "string", "enum": ["in_person", "online", "hybrid"]},
+                    },
+                    "delivery_mode_counts": {
+                        "type": ["array", "null"],
+                        "description": (
+                            "How many results of each delivery mode the student wants, e.g. "
+                            "'2 online and 2 in-person courses' -> "
+                            "[{mode: online, count: 2}, {mode: in_person, count: 2}]. Only set "
+                            "this when the student gave explicit counts per mode -- otherwise "
+                            "leave null and use delivery_modes instead."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "mode": {"type": "string", "enum": ["in_person", "online", "hybrid"]},
+                                "count": {"type": "integer", "minimum": 1},
+                            },
+                            "required": ["mode", "count"],
+                        },
                     },
                     "earliest_start_time": {"type": ["string", "null"], "description": "24h 'HH:MM'"},
                     "latest_start_time": {"type": ["string", "null"], "description": "24h 'HH:MM'"},
@@ -106,14 +125,17 @@ def parse_requirement_with_llm(query: str) -> ParsedRequirement:
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            tools=[_TOOL_SCHEMA],
-            tool_choice={"type": "tool", "name": _TOOL_NAME},
-            messages=[{"role": "user", "content": query}],
-        )
+        with track_llm_call("anthropic", "requirement_parsing", settings.anthropic_model) as rec:
+            response = client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=1024,
+                system=_SYSTEM_PROMPT,
+                tools=[_TOOL_SCHEMA],
+                tool_choice={"type": "tool", "name": _TOOL_NAME},
+                messages=[{"role": "user", "content": query}],
+            )
+            rec.input_tokens = response.usage.input_tokens
+            rec.output_tokens = response.usage.output_tokens
     except anthropic.APIError as exc:
         raise LLMParserError(f"Anthropic API call failed: {exc}") from exc
 

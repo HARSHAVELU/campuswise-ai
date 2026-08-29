@@ -134,3 +134,19 @@ export interface ScheduleGenerateRequest {
   min_credits: number;
   max_credits: number;
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  history: ChatMessage[];
+}
+
+export interface ChatResponse {
+  reply: string;
+  intent: string;
+  reply_source: string;
+}

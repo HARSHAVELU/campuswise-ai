@@ -9,6 +9,19 @@ DAYS_OF_WEEK = (
 )
 
 
+class DeliveryModeCount(BaseModel):
+    """A composition requirement: "N sections of this delivery mode."
+
+    Distinct from `delivery_modes` (a per-item filter -- "each section must
+    be one of these modes"): this is a per-*result-set* requirement -- "the
+    results should include at least N of this mode." E.g. "2 online and 2
+    in-person courses" parses to two of these, not just a wider filter.
+    """
+
+    mode: str
+    count: int = Field(ge=1)
+
+
 class HardConstraints(BaseModel):
     """Requirements that cannot be violated when filtering candidates.
 
@@ -18,6 +31,14 @@ class HardConstraints(BaseModel):
 
     delivery_modes: list[str] | None = Field(
         default=None, description="Delivery modes the student will accept, e.g. ['online', 'hybrid']."
+    )
+    delivery_mode_counts: list[DeliveryModeCount] | None = Field(
+        default=None,
+        description=(
+            "How many results of each delivery mode the student wants, e.g. "
+            "[{mode: online, count: 2}, {mode: in_person, count: 2}] for "
+            "'2 online and 2 in-person courses'."
+        ),
     )
     earliest_start_time: str | None = Field(
         default=None, description="No section may start before this time, 24h 'HH:MM'."

@@ -22,11 +22,13 @@ from dataclasses import dataclass
 import voyageai
 
 from app.core.config import get_settings
+from app.core.llm_telemetry import record_fallback, track_llm_call
 from app.models.syllabus import SyllabusChunk
 from app.retrieval.embeddings import embed_text
 
 logger = logging.getLogger(__name__)
 
+_PURPOSE = "rerank"
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 RRF_K = 60
@@ -92,13 +94,16 @@ def _rerank_with_voyage(query: str, candidates: list[RetrievedChunk], top_k: int
     try:
         client = voyageai.Client(api_key=settings.voyage_api_key)
         documents = [c.chunk.content for c in candidates]
-        result = client.rerank(query, documents, model=settings.voyage_rerank_model, top_k=top_k)
+        with track_llm_call("voyage", _PURPOSE, settings.voyage_rerank_model) as rec:
+            result = client.rerank(query, documents, model=settings.voyage_rerank_model, top_k=top_k)
+            rec.input_tokens = getattr(result, "total_tokens", None)
         return [
             RetrievedChunk(chunk=candidates[item.index].chunk, score=item.relevance_score)
             for item in result.results
         ]
     except Exception as exc:  # noqa: BLE001 -- reranking is an enhancement, never block retrieval
         logger.warning("Voyage rerank call failed, using RRF order: %s", exc)
+        record_fallback(_PURPOSE, "llm_error")
         return candidates[:top_k]
 
 
@@ -129,4 +134,5 @@ def hybrid_search(
     settings = get_settings()
     if settings.voyage_api_key:
         return _rerank_with_voyage(query, candidate_pool, top_k)
+    record_fallback(_PURPOSE, "no_api_key")
     return _rerank_heuristic(query, candidate_pool, top_k)

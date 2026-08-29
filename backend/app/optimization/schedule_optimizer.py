@@ -19,6 +19,7 @@ from enum import Enum
 from ortools.sat.python import cp_model
 
 from app.optimization.conflict_detection import meetings_overlap
+from app.schemas.ai_search import DeliveryModeCount
 from app.schemas.recommendation import SectionRecommendation
 
 SOLVER_TIME_LIMIT_SECONDS = 5.0
@@ -75,6 +76,7 @@ def solve_schedule(
     min_credits: int,
     max_credits: int,
     required_course_ids: set | None = None,
+    delivery_mode_counts: list[DeliveryModeCount] | None = None,
 ) -> ScheduleSolution | None:
     n = len(recommendations)
     if n == 0:
@@ -94,6 +96,13 @@ def solve_schedule(
         model.Add(sum(x[i] for i in idxs) <= 1)
         if required_course_ids and course_id in required_course_ids:
             model.Add(sum(x[i] for i in idxs) == 1)
+
+    if delivery_mode_counts:
+        for entry in delivery_mode_counts:
+            mode_idxs = [
+                i for i, rec in enumerate(recommendations) if rec.section.delivery_mode == entry.mode
+            ]
+            model.Add(sum(x[i] for i in mode_idxs) >= entry.count)
 
     for i in range(n):
         for j in range(i + 1, n):
@@ -135,3 +144,23 @@ def solve_schedule(
         {m.day_of_week for rec in selected for m in rec.section.meetings}, key=ALL_DAYS.index
     )
     return ScheduleSolution(selected=selected, total_credits=total_credits, campus_days=campus_days)
+
+
+def diagnose_insufficient_mode_candidates(
+    recommendations: list[SectionRecommendation], delivery_mode_counts: list[DeliveryModeCount]
+) -> list[str]:
+    """Checks whether the *candidate pool itself* (before conflicts/credits are
+    even considered) has enough sections of each requested mode. If not, that's
+    almost certainly why a schedule came back infeasible, so it's worth saying
+    explicitly rather than leaving the student with a generic "no schedule found."
+    """
+    notes = []
+    for entry in delivery_mode_counts:
+        available = sum(1 for rec in recommendations if rec.section.delivery_mode == entry.mode)
+        if available < entry.count:
+            mode_label = entry.mode.replace("_", " ")
+            notes.append(
+                f"Only {available} {mode_label} section(s) are available among your candidates; "
+                f"you requested at least {entry.count}."
+            )
+    return notes
