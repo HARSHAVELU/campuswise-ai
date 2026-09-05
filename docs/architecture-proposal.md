@@ -56,6 +56,8 @@ SSO, registration integration, waitlist/seat alerts, calendar export/integration
 
 ## B. System Architecture
 
+![CampusWise AI system architecture diagram](architecture-diagram.svg)
+
 ```mermaid
 flowchart LR
     subgraph Client

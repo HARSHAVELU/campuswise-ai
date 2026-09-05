@@ -12,6 +12,8 @@ CampusWise AI is an AI Academic Decision Intelligence Platform. A student descri
 
 See [`docs/architecture-proposal.md`](docs/architecture-proposal.md) for the full product/system/AI/database/API architecture and phased roadmap.
 
+![CampusWise AI system architecture diagram](docs/architecture-diagram.svg)
+
 ## Status
 
 **Phase 1 — Foundation** is complete: monorepo scaffold, FastAPI backend with health checks and basic auth, Next.js frontend shell, PostgreSQL (pgvector-ready) + Redis via Docker Compose, Alembic migrations, and a passing test suite.
