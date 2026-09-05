@@ -10,9 +10,7 @@ Students juggle disconnected tools — course catalogs, professor rating sites, 
 
 CampusWise AI is an AI Academic Decision Intelligence Platform. A student describes what they want in plain language; the system parses that into structured hard constraints and soft preferences, retrieves verified course/professor/grade/syllabus data, ranks and explains matches, and generates optimized semester schedules — without ever letting the AI invent a fact.
 
-See [`docs/architecture-proposal.md`](docs/architecture-proposal.md) for the full product/system/AI/database/API architecture and phased roadmap.
-
-![CampusWise AI system architecture diagram](docs/architecture-diagram.svg)
+See [`docs/architecture-proposal.md`](docs/architecture-proposal.md) for the full product/system/AI/database/API architecture and phased roadmap. The system architecture diagram is available as an editable [Excalidraw file](docs/architecture-diagram.excalidraw) — open it at [excalidraw.com](https://excalidraw.com) (File → Open).
 
 ## Status
 

@@ -56,7 +56,7 @@ SSO, registration integration, waitlist/seat alerts, calendar export/integration
 
 ## B. System Architecture
 
-![CampusWise AI system architecture diagram](architecture-diagram.svg)
+Editable diagram source: [`architecture-diagram.excalidraw`](architecture-diagram.excalidraw) (open at [excalidraw.com](https://excalidraw.com) via File → Open).
 
 ```mermaid
 flowchart LR
