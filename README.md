@@ -61,7 +61,7 @@ See [`docs/architecture-proposal.md`](docs/architecture-proposal.md) for the ful
 - **Backend:** Python, FastAPI, Pydantic, SQLAlchemy, Alembic, PostgreSQL (pgvector), Redis
 - **Embeddings/Rerank (from Phase 6 onward):** Voyage AI (`voyage-3-lite` / `rerank-2-lite`), with a dependency-free deterministic fallback when no key is configured
 - **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS
-- **AI (from Phase 4 onward):** LangGraph, LangChain, Anthropic Claude
+- **AI (from Phase 4 onward):** Anthropic Claude, called directly via the SDK — no agent framework; the LLM is confined to NL-to-constraint parsing and phrasing verified results, with everything else (filtering, ranking, retrieval, optimization) as deterministic code
 - **Optimization (from Phase 8 onward):** Google OR-Tools (CP-SAT)
 - **Infra:** Docker, Docker Compose
 

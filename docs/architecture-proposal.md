@@ -65,7 +65,7 @@ flowchart LR
     end
     subgraph API[FastAPI Backend]
         REST[REST API Layer]
-        AGENTS[LangGraph Agent Orchestration]
+        AGENTS[Pipeline Orchestration - plain Python, no agent framework]
         SVC[Services: ranking, optimization, analytics, degree]
         REPO[Repositories]
     end
@@ -97,33 +97,44 @@ flowchart LR
 
 ## C. AI Architecture
 
-### LangGraph workflow
+### Pipeline workflow (as built — no agent framework)
+
+The proposal originally scoped this as a LangGraph state machine. In practice, a
+framework wasn't needed: the request volume and branching are small enough that a
+keyword-based intent classifier plus direct function calls give the same guarantees
+(deterministic routing, no framework-hidden control flow) with less dependency
+weight and simpler testing. `app/agents/chat_pipeline.py` implements this directly:
 
 ```mermaid
 flowchart TD
-    U[Student Message] --> IR[Intent Router]
-    IR -->|search/recommend| RP[Requirement Parser Agent]
-    IR -->|syllabus question| SR[Syllabus Retrieval Agent]
-    IR -->|comparison| CMP[Comparison Node]
-    IR -->|schedule| SCH[Schedule Intent]
+    U[Student Message] --> IR[classify_intent - keyword rules]
+    IR -->|search/recommend| RP[Requirement Parser - Claude, with regex fallback]
+    IR -->|syllabus question| SR[Syllabus RAG pipeline]
+    IR -->|schedule| SCH[Schedule pipeline]
 
-    RP --> PAR[Parallel Retrieval]
+    RP --> PAR[Retrieval]
     PAR --> CDB[Course DB Query]
     PAR --> PDB[Professor DB Query]
     PAR --> GDB[Grade Analytics Query]
-    PAR --> RAG[Syllabus/Review RAG]
+    SR --> RAG[Syllabus RAG - hybrid retrieval + rerank]
 
-    CDB & PDB & GDB & RAG --> HCF[Hard Constraint Filter]
-    HCF --> RANK[Ranking Engine]
+    CDB & PDB & GDB --> HCF[Hard Constraint Filter]
+    HCF --> RANK[Ranking Engine - Fit Score]
     RANK --> SCH2{Schedule requested?}
     SCH2 -->|yes| OPT[Schedule Optimizer - OR-Tools]
-    SCH2 -->|no| EV[Evidence Validator]
-    OPT --> EV
-    EV --> RG[Response Generator - LLM]
+    SCH2 -->|no| RG
+    OPT --> RG
+    RAG --> RG[Response Generator - Claude, template fallback]
     RG --> U
 ```
 
-Nodes are a mix of LLM calls (Intent Router, Requirement Parser, Response Generator) and deterministic functions (retrieval, filtering, ranking, optimization, evidence validation). No agent is added without a distinct responsibility — this is the full agent set from brief §21, not more.
+Each pipeline function (requirement parsing, recommendations, syllabus RAG, schedule
+generation) is called directly from `chat_pipeline.py` — there's no orchestration
+graph, agent loop, or tool-calling framework in between. LLM calls are isolated to a
+handful of call sites (intent parsing, final response phrasing, syllabus answer
+synthesis, assessment extraction) and every one of them has a deterministic
+fallback so the platform works with no `ANTHROPIC_API_KEY` configured. Filtering,
+ranking, and optimization are always deterministic code, never an LLM call.
 
 ### RAG pipeline (syllabi, reviews, policies)
 Documents → parse (PDF/HTML) → clean → metadata extraction (university, dept, course, professor, term, section, doc type) → chunk → embed → vector store (pgvector for MVP; Qdrant swap-in later) → hybrid retrieval (dense + BM25) → Reciprocal Rank Fusion → cross-encoder rerank → top-k to LLM → citation-attached response.
@@ -203,7 +214,7 @@ All request/response bodies are Pydantic models; errors return structured `{erro
 
 **Component families:** `CourseResultCard`, `ProfessorProfileCard`, `ComparisonTable`, `FitScoreBreakdown`, `WeeklyScheduleCalendar`, `ChatThread`, `EvidenceBadge` (renders provenance: OFFICIAL/HISTORICAL/SYLLABUS/STUDENT-REPORTED/AI-SUMMARY), `GradeDistributionChart`.
 
-UX principle enforced throughout: no AI/infra jargon (embeddings, RRF, LangGraph, reranker) surfaces to the user — only "here's what matched and why" (brief §59).
+UX principle enforced throughout: no AI/infra jargon (embeddings, RRF, reranker) surfaces to the user — only "here's what matched and why" (brief §59).
 
 ---
 
